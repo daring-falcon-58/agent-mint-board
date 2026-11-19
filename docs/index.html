@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Mint Board — verified free mints for Agent ID holders</title>
+<meta name="description" content="A board of verified free mints on BNB Chain. Only Binance Agent ID holders can claim a slot. No funds ever move through this contract.">
+<style>
+  :root { --bg:#0b0e14; --card:#141a26; --line:#232c3d; --text:#e8ecf3; --muted:#9aa7bd; --accent:#f0b90b; --green:#2ebd85; --red:#f6465d; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; line-height:1.5; }
+  .wrap { max-width:860px; margin:0 auto; padding:24px 16px 64px; }
+  header { border-bottom:1px solid var(--line); padding-bottom:16px; margin-bottom:20px; }
+  h1 { margin:0 0 4px; font-size:28px; }
+  h1 span { color:var(--accent); }
+  .sub { color:var(--muted); margin:0 0 12px; }
+  .meta { font-size:13px; color:var(--muted); word-break:break-all; }
+  .meta a { color:var(--accent); }
+  .badge { display:inline-block; font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid var(--green); color:var(--green); margin-right:6px; }
+  .badge.warn { border-color:var(--accent); color:var(--accent); }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:14px 0; }
+  button { background:var(--accent); color:#111; border:0; border-radius:8px; padding:10px 16px; font-weight:700; cursor:pointer; font-size:15px; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
+  input { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:14px; width:100%; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin:12px 0; }
+  .card h3 { margin:0 0 6px; font-size:18px; }
+  .card p { margin:4px 0; color:var(--muted); font-size:14px; }
+  .card .addr { font-family:ui-monospace,Menlo,monospace; font-size:12px; word-break:break-all; }
+  .card a { color:var(--accent); }
+  .pill { float:right; font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+  .pill.open { border-color:var(--green); color:var(--green); }
+  .pill.full { border-color:var(--red); color:var(--red); }
+  .pill.done { border-color:var(--accent); color:var(--accent); }
+  #status { font-size:14px; color:var(--muted); }
+  #status b { color:var(--text); }
+  .empty { text-align:center; color:var(--muted); padding:32px 0; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  @media (max-width:560px){ .grid2{ grid-template-columns:1fr; } }
+  footer { margin-top:32px; border-top:1px solid var(--line); padding-top:14px; font-size:13px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Agent <span>Mint</span> Board</h1>
+    <p class="sub">Verified free mints on BNB Chain, curated for Binance Agent ID holders. Claim a slot on-chain — no funds ever move through this contract.</p>
+    <div class="meta">
+      <span class="badge">Sourcify exact match</span>
+      <span class="badge warn">BscScan verification pending</span><br>
+      Board: <a id="boardLink" href="https://bscscan.com/address/0x4c5f3bc50c46ff622f8963230f85a261f0afdff1" target="_blank" rel="noopener">0x4c5f3bc50c46ff622f8963230f85a261f0afdff1</a><br>
+      Agent ID: <a href="https://bscscan.com/address/0x60B9262456dE011F7d15a54CdD8c48bAaa8B022F" target="_blank" rel="noopener">0x60B9262456dE011F7d15a54CdD8c48bAaa8B022F</a> &nbsp;·&nbsp; Curator: <span id="curator">…</span>
+    </div>
+  </header>
+
+  <div class="row">
+    <button id="connectBtn">Connect wallet</button>
+    <button id="refreshBtn" class="ghost">Refresh board</button>
+    <span id="status">Not connected. Connect a wallet holding an Agent ID to claim.</span>
+  </div>
+
+  <div id="list"><p class="empty">Loading board…</p></div>
+
+  <div class="card">
+    <h3>Propose a mint</h3>
+    <p>Hold an Agent ID? Propose a free mint for the curator to verify. Only mints that are free, source-verified and need no token approval get listed.</p>
+    <div class="grid2">
+      <input id="propContract" placeholder="Mint contract address (0x…)">
+      <input id="propName" placeholder="Mint name">
+    </div>
+    <div class="row"><button id="proposeBtn" disabled>Propose mint</button></div>
+    <p id="propMsg"></p>
+  </div>
+
+  <footer>
+    Built for the Binance Agent ID Hackathon. Contract is open source:
+    <a href="https://github.com/daring-falcon-58/agent-mint-board" target="_blank" rel="noopener">github.com/daring-falcon-58/agent-mint-board</a>.
+    One claim per Agent ID holder per mint. The curator lists mints only after off-chain verification.
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<script>
+const BOARD = "0x4c5f3bc50c46ff622f8963230f85a261f0afdff1";
+const AGENT_ID = "0x60B9262456dE011F7d15a54CdD8c48bAaa8B022F";
+const RPC = "https://bsc-dataseed.binance.org/";
+const ABI = [
+  "function mintCount() view returns (uint256)",
+  "function getMint(uint256) view returns (tuple(address mintContract,string name,string infoURI,uint256 maxClaims,uint256 claims,bool active))",
+  "function hasClaimed(uint256,address) view returns (bool)",
+  "function curator() view returns (address)",
+  "function claim(uint256)",
+  "function proposeMint(address,string)"
+];
+const AGENT_ABI = ["function balanceOf(address) view returns (uint256)"];
+
+let provider, board, signer, account = null;
+
+const $ = id => document.getElementById(id);
+const short = a => a ? a.slice(0,6) + "…" + a.slice(-4) : "";
+
+async function loadBoard() {
+  try {
+    if (!window.ethers) { $("list").innerHTML = '<p class="empty">Failed to load ethers.js — check your connection and refresh.</p>'; return; }
+    provider = new ethers.JsonRpcProvider(RPC);
+    board = new ethers.Contract(BOARD, ABI, provider);
+    $("curator").textContent = short(await board.curator());
+    const n = Number(await board.mintCount());
+    if (n === 0) { $("list").innerHTML = '<p class="empty">No mints listed yet — the curator is verifying the first free mints. Check back soon.</p>'; return; }
+    let html = "";
+    for (let i = 0; i < n; i++) {
+      const m = await board.getMint(i);
+      const claimed = account ? await board.hasClaimed(i, account) : false;
+      const full = m.claims >= m.maxClaims;
+      const pill = !m.active ? '<span class="pill">inactive</span>'
+        : claimed ? '<span class="pill done">you claimed ✓</span>'
+        : full ? '<span class="pill full">full</span>'
+        : '<span class="pill open">open</span>';
+      html += `<div class="card">${pill}<h3>${esc(m.name)}</h3>
+        <p class="addr">Contract: <a href="https://bscscan.com/address/${m.mintContract}" target="_blank" rel="noopener">${m.mintContract}</a></p>
+        ${m.infoURI ? `<p>Info: <a href="${esc(m.infoURI)}" target="_blank" rel="noopener">${esc(m.infoURI)}</a></p>` : ""}
+        <p>Claims: ${m.claims} / ${m.maxClaims} &nbsp;·&nbsp; Free mint — gas only</p>
+        <div class="row"><button data-claim="${i}" ${(!account || !m.active || claimed || full) ? "disabled" : ""}>Claim slot</button></div>
+      </div>`;
+    }
+    $("list").innerHTML = html;
+    document.querySelectorAll("[data-claim]").forEach(b => b.onclick = () => doClaim(Number(b.dataset.claim)));
+  } catch (e) {
+    $("list").innerHTML = '<p class="empty">Could not read the board from BSC. Refresh to retry.</p>';
+    console.error(e);
+  }
+}
+
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+async function connect() {
+  if (!window.ethereum) { $("status").innerHTML = "No wallet found — install MetaMask or open this page in the Binance Wallet app."; return; }
+  try {
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    const wp = new ethers.BrowserProvider(window.ethereum);
+    const net = await wp.getNetwork();
+    if (net.chainId !== 56n) {
+      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x38" }] });
+    }
+    signer = await wp.getSigner();
+    account = await signer.getAddress();
+    const agent = new ethers.Contract(AGENT_ID, AGENT_ABI, wp);
+    const bal = await agent.balanceOf(account);
+    $("status").innerHTML = `<b>${short(account)}</b> · Agent ID: ${bal > 0n ? "✅ held" : "❌ not held — claims need an Agent ID"}`;
+    $("connectBtn").textContent = "Connected: " + short(account);
+    $("proposeBtn").disabled = bal === 0n;
+    await loadBoard();
+  } catch (e) { $("status").textContent = "Wallet connection failed: " + (e?.message || e); }
+}
+
+async function doClaim(mintId) {
+  try {
+    $("status").textContent = "Sending claim…";
+    const tx = await board.connect(signer).claim(mintId);
+    $("status").textContent = "Claim sent — waiting for confirmation…";
+    await tx.wait();
+    $("status").innerHTML = `Claimed ✓ — <a href="https://bscscan.com/tx/${tx.hash}" target="_blank" rel="noopener">view on BscScan</a>`;
+    await loadBoard();
+  } catch (e) { $("status").textContent = "Claim failed: " + (e?.reason || e?.message || e); }
+}
+
+async function doPropose() {
+  const c = $("propContract").value.trim(), n = $("propName").value.trim();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(c) || !n) { $("propMsg").textContent = "Enter a valid contract address and a name."; return; }
+  try {
+    $("propMsg").textContent = "Sending proposal…";
+    const tx = await board.connect(signer).proposeMint(c, n);
+    await tx.wait();
+    $("propMsg").innerHTML = `Proposed ✓ — <a href="https://bscscan.com/tx/${tx.hash}" target="_blank" rel="noopener">view on BscScan</a>`;
+  } catch (e) { $("propMsg").textContent = "Proposal failed: " + (e?.reason || e?.message || e); }
+}
+
+$("connectBtn").onclick = connect;
+$("refreshBtn").onclick = loadBoard;
+$("proposeBtn").onclick = doPropose;
+loadBoard();
+</script>
+</body>
+</html>
